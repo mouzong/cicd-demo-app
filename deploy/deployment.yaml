@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cicd-demo-app
+  template:
+    metadata:
+      labels:
+        app: cicd-demo-app
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: cicd-demo-pod
+          image: ghcr.io/mouzong/cicd-demo-app:12dummysha
+          ports:
+            - containerPort: 8080
