@@ -16,6 +16,6 @@ spec:
         - name: ghcr-secret
       containers:
         - name: cicd-demo-pod
-          image: ghcr.io/mouzong/cicd-demo-app:502fc50a3e5b7b017af1e88a9dd561efb307417c
+          image: ghcr.io/mouzong/cicd-demo-app:0b42911d0b43813abd44dc0edb8a4160f12446a4
           ports:
             - containerPort: 8080
