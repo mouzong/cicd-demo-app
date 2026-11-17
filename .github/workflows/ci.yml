@@ -11,26 +11,57 @@ jobs:
     permissions:
       contents: write
       packages: write
+
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set GHCR image name
+        id: image
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "name=ghcr.io/${OWNER,,}/cicd-demo-app" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
-        run: docker build -t ghcr.io/${{ github.repository_owner }}/cicd-demo-app:${{ github.sha }} .
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
 
-      - name: Push image to registry
-        run: docker push ghcr.io/${{ github.repository_owner }}/cicd-demo-app:${{ github.sha }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
-      - name: Update manifest
+      - name: Build and push AMD64 and ARM64 images
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+
+      - name: Update and commit the deployment manifest
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
         run: |
-          sed -i "s|image: .*|image: ghcr.io/${{ github.repository_owner }}/cicd-demo-app:${{ github.sha }}|" deploy/deployment.yaml
+          manifest=deploy/deployment.yaml
 
-      - name: Commit manifest update
-        run: | 
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git commit -am "Update image tag"
-          git push
-        
+          # Update only the demo app image, leaving any sidecar images alone.
+          sed -i -E \
+            "s|^([[:space:]]*image:[[:space:]]*)['\"]?${IMAGE_NAME}([:@][^[:space:]'\"]+)?['\"]?([[:space:]]*(#.*)?)$|\1${IMAGE_NAME}:${GITHUB_SHA}\3|" \
+            "$manifest"
+
+          if ! grep -Fq "image: ${IMAGE_NAME}:${GITHUB_SHA}" "$manifest"; then
+            echo "::error::Expected an image reference to ${IMAGE_NAME} in ${manifest}"
+            exit 1
+          fi
+
+          git diff --quiet -- "$manifest" && exit 0
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$manifest"
+          git commit -m "Deploy image ${GITHUB_SHA}"
+          git push origin HEAD:main
