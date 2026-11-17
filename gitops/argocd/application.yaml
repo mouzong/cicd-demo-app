@@ -11,7 +11,7 @@ spec:
     path: deploy
   destination:
     server: https://kubernetes.default.svc
-    namespace: flask-demo
+    namespace: default
   syncPolicy:
     automated:
       prune: true
